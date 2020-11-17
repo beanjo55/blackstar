@@ -5,7 +5,9 @@ requirements:
 
 Node 14
 
-To run
+
+
+To run:
 
 (if first run) npm i
 
