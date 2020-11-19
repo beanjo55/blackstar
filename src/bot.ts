@@ -111,6 +111,7 @@ class Bot {
         this.client.on("error", this.error.bind(this));
         this.client.once("ready", this.ready.bind(this));
         this.client.connect();
+        this.client.editStatus("online", {type: 3, name: "the starboard"});
     }
 
     error(err: Error): void {
@@ -122,11 +123,11 @@ class Bot {
     }
 
     formatPost(msg: Message, count: number, starredAt: number): MessageContent {
-        const out: MessageContent = {content: `🌟 ${count} | ${msg.channel.mention}` };
+        const out: MessageContent = {content: `🌟 **${count}** | ${msg.channel.mention}` };
         out.embed = {
             author: {icon_url: msg.author.avatarURL, name: `${msg.author.username}#${msg.author.discriminator}`},
             timestamp: new Date(starredAt),
-            color: 6658041,
+            color: 3375061,
             footer: {text: "MessageID: " + msg.id},
             fields: [{name: "\u200b", value: `[Click to jump to message!](${msg.jumpLink})`}]
         };
@@ -175,12 +176,18 @@ class Bot {
         if(this.global.starChannel === ""){return;}
         if(this.global.ignoredChannels.includes(omsg.channel.id)){return;}
         const fullName = emote.id ? emote.animated ? `a:${emote.name}:${emote.id}` : `${emote.name}:${emote.id}` : emote.name;
-        if(fullName !== this.global.emote ?? "⭐"){return;}
+        let toCheck;
+        if(this.global.emote === undefined || this.global.emote === ""){
+            toCheck = "⭐";
+        }else{
+            toCheck = this.global.emote;
+        }
+        if(fullName !== toCheck){return;}
         const guild = this.client.guilds.get((omsg.channel as GuildTextableChannel).guild.id)!;
         const channel = guild.channels.get(omsg.channel.id)! as GuildTextableChannel;
         let msg: Message;
         if(!(omsg as Message).author){
-            const temp = await channel.getMessage(omsg.id).catch(() => undefined);
+            const temp = await channel.getMessage(omsg.id).catch();
             if(!temp){return;}
             msg = temp;
         }else{
@@ -201,7 +208,6 @@ class Bot {
                 if((user as Member).roles.some(r => this.global.ignoredRoles.includes(r))){return;}
             }
         }
-
         let data = await this.starModel.findOne({message: msg.id}).exec();
         if(!data){
             data = await this.starModel.create({message: msg.id, count: 1});
@@ -245,7 +251,13 @@ class Bot {
         if(this.global.starChannel === ""){return;}
         if(this.global.ignoredChannels.includes(omsg.channel.id)){return;}
         const fullName = emote.id ? emote.animated ? `a:${emote.name}:${emote.id}` : `${emote.name}:${emote.id}` : emote.name;
-        if(fullName !== this.global.emote ?? "⭐"){return;}
+        let toCheck;
+        if(this.global.emote === undefined || this.global.emote === ""){
+            toCheck = "⭐";
+        }else{
+            toCheck = this.global.emote;
+        }
+        if(fullName !== toCheck){return;}
         const guild = this.client.guilds.get((omsg.channel as GuildTextableChannel).guild.id)!;
         const channel = guild.channels.get(omsg.channel.id)! as GuildTextableChannel;
         let msg: Message;
@@ -287,7 +299,7 @@ class Bot {
     }
 
     async messageCreate(msg: Message<GuildTextableChannel>): Promise<void> {
-        if(!(msg.member!.permissions.has("manageGuild") || msg.member!.roles.some(r => this.global.managerRoles.includes(r)) || msg.author.id === "253233185800847361" || msg.author.id === "254814547326533632")){return;}
+        if(!(msg.member?.permissions.has("manageGuild") || msg.member?.roles.some(r => this.global.managerRoles.includes(r)) || msg.author.id === "253233185800847361" || msg.author.id === "254814547326533632")){return;}
         if(!msg.content.toLowerCase().startsWith("%starboard")){return;}
         const args = msg.content.split(" ").slice(1);
         const name = args.shift();
@@ -349,7 +361,7 @@ class Bot {
                 this.global.ignoredRoles.push(role.id);
             }
             await this.globalModel.updateOne({}, this.global).exec();
-            msg.channel.createMessage(rem ? "Added" : "Removed" + " " + role.name + " from ignored roles").catch(() => undefined);
+            msg.channel.createMessage(!rem ? "Added" : "Removed" + " " + role.name + " from ignored roles").catch(() => undefined);
             break;
         }
         case "ignoredchannel": {
@@ -372,7 +384,7 @@ class Bot {
                 this.global.ignoredChannels.push(channel.id);
             }
             await this.globalModel.updateOne({}, this.global).exec();
-            msg.channel.createMessage(rem ? "Added" : "Removed" + " " + channel.name + " from ignored channels").catch(() => undefined);
+            msg.channel.createMessage(!rem ? "Added" : "Removed" + " " + channel.name + " from ignored channels").catch(() => undefined);
             break;
         }
         case "threshold": {
@@ -397,7 +409,7 @@ class Bot {
                 msg.channel.createMessage("Reset threshold for " + channel.name + " to the default").catch(() => undefined);
                 break;
             }else{
-                const threshold = Number(args[0]);
+                const threshold = Number(args[1]);
                 if(isNaN(threshold) || threshold < 3){
                     msg.channel.createMessage("Please provide a valid threshold of 3 or greater").catch(() => undefined);
                     break;

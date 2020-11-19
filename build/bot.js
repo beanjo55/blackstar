@@ -122,6 +122,7 @@ class Bot {
         this.client.on("error", this.error.bind(this));
         this.client.once("ready", this.ready.bind(this));
         this.client.connect();
+        this.client.editStatus("online", { type: 3, name: "the starboard" });
     }
     error(err) {
         signale_1.default.error(err.message);
@@ -130,7 +131,7 @@ class Bot {
         signale_1.default.success("Blackstar Ready!");
     }
     formatPost(msg, count, starredAt) {
-        const out = { content: `🌟 ${count} | ${msg.channel.mention}` };
+        const out = { content: `🌟 **${count}** | ${msg.channel.mention}` };
         out.embed = {
             author: { icon_url: msg.author.avatarURL, name: `${msg.author.username}#${msg.author.discriminator}` },
             timestamp: new Date(starredAt),
@@ -186,14 +187,21 @@ class Bot {
             return;
         }
         const fullName = emote.id ? emote.animated ? `a:${emote.name}:${emote.id}` : `${emote.name}:${emote.id}` : emote.name;
-        if (fullName !== this.global.emote ?? "⭐") {
+        let toCheck;
+        if (this.global.emote === undefined || this.global.emote === "") {
+            toCheck = "⭐";
+        }
+        else {
+            toCheck = this.global.emote;
+        }
+        if (fullName !== toCheck) {
             return;
         }
         const guild = this.client.guilds.get(omsg.channel.guild.id);
         const channel = guild.channels.get(omsg.channel.id);
         let msg;
         if (!omsg.author) {
-            const temp = await channel.getMessage(omsg.id).catch(() => undefined);
+            const temp = await channel.getMessage(omsg.id).catch();
             if (!temp) {
                 return;
             }
@@ -284,7 +292,14 @@ class Bot {
             return;
         }
         const fullName = emote.id ? emote.animated ? `a:${emote.name}:${emote.id}` : `${emote.name}:${emote.id}` : emote.name;
-        if (fullName !== this.global.emote ?? "⭐") {
+        let toCheck;
+        if (this.global.emote === undefined || this.global.emote === "") {
+            toCheck = "⭐";
+        }
+        else {
+            toCheck = this.global.emote;
+        }
+        if (fullName !== toCheck) {
             return;
         }
         const guild = this.client.guilds.get(omsg.channel.guild.id);
@@ -348,7 +363,7 @@ class Bot {
         }
     }
     async messageCreate(msg) {
-        if (!(msg.member.permissions.has("manageGuild") || msg.member.roles.some(r => this.global.managerRoles.includes(r)) || msg.author.id === "253233185800847361" || msg.author.id === "254814547326533632")) {
+        if (!(msg.member?.permissions.has("manageGuild") || msg.member?.roles.some(r => this.global.managerRoles.includes(r)) || msg.author.id === "253233185800847361" || msg.author.id === "254814547326533632")) {
             return;
         }
         if (!msg.content.toLowerCase().startsWith("%starboard")) {
@@ -418,7 +433,7 @@ class Bot {
                     this.global.ignoredRoles.push(role.id);
                 }
                 await this.globalModel.updateOne({}, this.global).exec();
-                msg.channel.createMessage(rem ? "Added" : "Removed" + " " + role.name + " from ignored roles").catch(() => undefined);
+                msg.channel.createMessage(!rem ? "Added" : "Removed" + " " + role.name + " from ignored roles").catch(() => undefined);
                 break;
             }
             case "ignoredchannel": {
@@ -442,7 +457,7 @@ class Bot {
                     this.global.ignoredChannels.push(channel.id);
                 }
                 await this.globalModel.updateOne({}, this.global).exec();
-                msg.channel.createMessage(rem ? "Added" : "Removed" + " " + channel.name + " from ignored channels").catch(() => undefined);
+                msg.channel.createMessage(!rem ? "Added" : "Removed" + " " + channel.name + " from ignored channels").catch(() => undefined);
                 break;
             }
             case "threshold": {
@@ -468,7 +483,7 @@ class Bot {
                     break;
                 }
                 else {
-                    const threshold = Number(args[0]);
+                    const threshold = Number(args[1]);
                     if (isNaN(threshold) || threshold < 3) {
                         msg.channel.createMessage("Please provide a valid threshold of 3 or greater").catch(() => undefined);
                         break;
