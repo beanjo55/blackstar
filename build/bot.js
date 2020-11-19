@@ -78,7 +78,7 @@ class Bot {
     }
     async init() {
         this.db = await mongoose_1.default.connect(config.mongoLogin, {
-            dbName: "DSB",
+            dbName: "blackstar",
             useNewUrlParser: true,
             useUnifiedTopology: true,
             useCreateIndex: true
@@ -135,7 +135,7 @@ class Bot {
         out.embed = {
             author: { icon_url: msg.author.avatarURL, name: `${msg.author.username}#${msg.author.discriminator}` },
             timestamp: new Date(starredAt),
-            color: 6658041,
+            color: 3375061,
             footer: { text: "MessageID: " + msg.id },
             fields: [{ name: "\u200b", value: `[Click to jump to message!](${msg.jumpLink})` }]
         };

@@ -65,7 +65,7 @@ class Bot {
 
     async init(): Promise<void> {
         this.db = await mongoose.connect(config.mongoLogin, {
-            dbName: "DSB",
+            dbName: "blackstar",
             useNewUrlParser: true,
             useUnifiedTopology: true,
             useCreateIndex: true
