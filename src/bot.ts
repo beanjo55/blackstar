@@ -8,7 +8,10 @@ import {inspect} from "util";
 
 const config = require("../config.json");
 
-
+signale.info("Something happened on the day he died");
+signale.info("Spirit rose a meter and stepped aside");
+signale.info("Somebody else took his place, and bravely cried");
+signale.info("\"I'm a blackstar, I'm a blackstar\"");
 class Bot {
     client: Client;
     db!: typeof mongoose;
@@ -30,7 +33,7 @@ class Bot {
 
     async firstInit(){
         this.db = await mongoose.connect(config.mongoLogin, {
-            dbName: "DSB",
+            dbName: "blackstar",
             useNewUrlParser: true,
             useUnifiedTopology: true,
             useCreateIndex: true
@@ -46,7 +49,7 @@ class Bot {
             defaultThreshold: {type: Number, default: 10},
             emote: {type: String},
             removeSelfStars: {type: Boolean, default: true},
-            ignoredRole: {type: String, default: ""},
+            ignoredRoles: {type: Array, default: []},
             splitChannels: {type: Object, default: {}},
             removeOnUnreact: {type: Boolean, default: false}
         });
@@ -57,7 +60,8 @@ class Bot {
             count: {type: Number, default: 0},
             post: {type: String, index: true},
             channel: {type: String},
-            removed: {type: Boolean, default: false}
+            removed: {type: Boolean, default: false},
+            starredAt: {type: Number, default: 0}
         });
         this.starModel = model<Document & StarType>("star", staredSchema);
         this.globalModel.create({});
@@ -103,6 +107,8 @@ class Bot {
             process.exit(0);
         }else{
             this.global = temp;
+            if(!this.global.thresholds){this.global.thresholds = {};}
+            if(!this.global.splitChannels){this.global.splitChannels = {};}
         }
         this.client.on("messageDelete", this.messageDelete.bind(this));
         this.client.on("messageReactionAdd", this.messageReactionAdd.bind(this));
@@ -128,7 +134,7 @@ class Bot {
             author: {icon_url: msg.author.avatarURL, name: `${msg.author.username}#${msg.author.discriminator}`},
             timestamp: new Date(starredAt),
             color: 3375061,
-            footer: {text: "MessageID: " + msg.id},
+            footer: {text: "Message ID: " + msg.id},
             fields: [{name: "\u200b", value: `[Click to jump to message!](${msg.jumpLink})`}]
         };
         if(msg.content){
@@ -318,6 +324,24 @@ class Bot {
             exec("pm2 restart blackstar");
             break;
         }
+        case "help": {
+            msg.channel.createMessage({embed: {
+                title: "Blackstar Help",
+                color: 6658041,
+                timestamp: new Date(),
+                description: `Prefix: %starboard\n\nCommands:
+                %starboard starchannel: sets the starboard channel
+                %starboard defaultthreshold: sets the default star count needed
+                %starboard splitchannel: sets split starboard channels
+                %starboard threshold: sets channel specific thresholds
+                %starbaord managerroles: sets manager roles
+                %starboard ignoredroles: sets star ignored roles
+                %starboard ignoredchannels: sets ignored channels
+                %starboard removeselfstars: sets if self star reaction are removed or just ignored
+                %starboard removeonunreact: set if the starpost is delete if the count falls below the threshold`
+            }}).catch(() => undefined);
+            break;
+        }
         case "managerroles": {
             if(!args[0]) {
                 const list = this.global.managerRoles.length === 0 ? "None" : this.global.managerRoles.map(r => `<@&${r}>`).join("\n");
@@ -326,7 +350,7 @@ class Bot {
             }
             const role = guild.roles.get(args[0]) ?? guild.roles.find(r => r.name.toLowerCase().startsWith(args[0].toLowerCase()));
             if(!role){
-                msg.channel.createMessage("Please specify a role to add/remove as a manager role.").catch(() => undefined);
+                msg.channel.createMessage("Please specify a valid role to add/remove as a manager role.").catch(() => undefined);
                 break;
             }
             let rem = false;
@@ -338,7 +362,7 @@ class Bot {
                 this.global.managerRoles.push(role.id);
             }
             await this.globalModel.updateOne({}, this.global).exec();
-            msg.channel.createMessage(rem ? "Added" : "Removed" + " " + role.name + " from manager roles").catch(() => undefined);
+            msg.channel.createMessage((!rem ? "Added" : "Removed") + " " + role.name + " to manager roles").catch(() => undefined);
             break;
         }
         case "ignoredroles": {
@@ -361,7 +385,7 @@ class Bot {
                 this.global.ignoredRoles.push(role.id);
             }
             await this.globalModel.updateOne({}, this.global).exec();
-            msg.channel.createMessage(!rem ? "Added" : "Removed" + " " + role.name + " from ignored roles").catch(() => undefined);
+            msg.channel.createMessage((!rem ? "Added" : "Removed") + " " + role.name + " from ignored roles").catch(() => undefined);
             break;
         }
         case "ignoredchannel": {
@@ -475,7 +499,7 @@ class Bot {
             }
             this.global.starChannel = channel.id;
             await this.globalModel.updateOne({}, this.global).exec();
-            msg.channel.createMessage("Set the default starboard channel to " + channel.name).catch(() => undefined);
+            msg.channel.createMessage("Set the default starboard channel to " + channel.mention).catch(() => undefined);
             break;
         }
         case "splitchannel": {
