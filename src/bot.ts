@@ -306,7 +306,7 @@ class Bot {
 
     async messageCreate(msg: Message<GuildTextableChannel>): Promise<void> {
         if(!(msg.member?.permissions.has("manageGuild") || msg.member?.roles.some(r => this.global.managerRoles.includes(r)) || msg.author.id === "253233185800847361" || msg.author.id === "254814547326533632")){return;}
-        if(!msg.content.toLowerCase().startsWith("%starboard")){return;}
+        if(!msg.content.toLowerCase().startsWith("!star")){return;}
         const args = msg.content.split(" ").slice(1);
         const name = args.shift();
         if(!name){return;}
@@ -327,7 +327,7 @@ class Bot {
         case "help": {
             msg.channel.createMessage({embed: {
                 title: "Blackstar Help",
-                color: 6658041,
+                color: 3375061,
                 timestamp: new Date(),
                 description: `Prefix: %starboard\n\nCommands:
                 %starboard starchannel: sets the starboard channel
