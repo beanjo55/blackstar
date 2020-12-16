@@ -1,10 +1,11 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable complexity */
-import {Client, Emoji, GuildTextableChannel, Member, Message, MessageContent, PossiblyUncachedMessage} from "eris";
+import {Client, Emoji, GuildTextableChannel, Member, Message, MessageContent, MessageFile, PossiblyUncachedMessage} from "eris";
 import mongoose, {Schema, model, Model, Document} from "mongoose";
 import signale from "signale";
 import {exec} from "child_process";
 import {inspect} from "util";
+import {default as fetch} from "node-fetch";
 
 const config = require("../config.json");
 
@@ -51,7 +52,8 @@ class Bot {
             removeSelfStars: {type: Boolean, default: true},
             ignoredRoles: {type: Array, default: []},
             splitChannels: {type: Object, default: {}},
-            removeOnUnreact: {type: Boolean, default: false}
+            removeOnUnreact: {type: Boolean, default: false},
+            color: {type: Number, default: 16291859}
         });
         this.globalModel = model<Document & GlobalType>("global", globalSchema);
 
@@ -87,7 +89,8 @@ class Bot {
             removeSelfStars: {type: Boolean, default: true},
             ignoredRoles: {type: Array, default: []},
             splitChannels: {type: Object, default: {}},
-            removeOnUnreact: {type: Boolean, default: false}
+            removeOnUnreact: {type: Boolean, default: false},
+            color: {type: Number, default: 16291859}
         });
         this.globalModel = model<Document & GlobalType>("global", globalSchema);
 
@@ -107,8 +110,9 @@ class Bot {
             process.exit(0);
         }else{
             this.global = temp;
-            if(!this.global.thresholds){this.global.thresholds = {};}
-            if(!this.global.splitChannels){this.global.splitChannels = {};}
+            this.global.thresholds ??= {};
+            this.global.splitChannels ??= {};
+            this.global.color ??= 16291859;
         }
         this.client.on("messageDelete", this.messageDelete.bind(this));
         this.client.on("messageReactionAdd", this.messageReactionAdd.bind(this));
@@ -133,7 +137,7 @@ class Bot {
         out.embed = {
             author: {icon_url: msg.author.avatarURL, name: `${msg.author.username}#${msg.author.discriminator}`},
             timestamp: new Date(starredAt),
-            color: 3375061,
+            color: this.global.color,
             footer: {text: "Message ID: " + msg.id},
             fields: [{name: "\u200b", value: `[Click to jump to message!](${msg.jumpLink})`}]
         };
@@ -179,8 +183,9 @@ class Bot {
     }
 
     async messageReactionAdd(omsg: PossiblyUncachedMessage, emote: Emoji, user: Member | {id: string}): Promise<void> {
+        if(user.id === this.client.user.id){return;}
         if(this.global.starChannel === ""){return;}
-        if(this.global.ignoredChannels.includes(omsg.channel.id)){return;}
+        
         const fullName = emote.id ? emote.animated ? `a:${emote.name}:${emote.id}` : `${emote.name}:${emote.id}` : emote.name;
         let toCheck;
         if(this.global.emote === undefined || this.global.emote === ""){
@@ -190,6 +195,7 @@ class Bot {
         }
         if(fullName !== toCheck){return;}
         const guild = this.client.guilds.get((omsg.channel as GuildTextableChannel).guild.id)!;
+        
         const channel = guild.channels.get(omsg.channel.id)! as GuildTextableChannel;
         let msg: Message;
         if(!(omsg as Message).author){
@@ -199,6 +205,15 @@ class Bot {
         }else{
             msg = omsg as Message;
         }
+        const sbData = await this.starModel.findOne({post: omsg.id}).exec();
+        if(sbData?.post){
+            sbData.count++;
+            await this.starModel.updateOne({message: sbData.message}, sbData).exec();
+            const newContent = `🌟 **${sbData.count}** | ` + msg.content.split(" | ")[1];
+            msg.edit({content: newContent, embed: msg.embeds[0]}).catch(() => undefined);
+            return;
+        }
+        if(this.global.ignoredChannels.includes(omsg.channel.id)){return;}
         if(msg.author.id === user.id){
             if(this.global.removeSelfStars){
                 msg.removeReaction(fullName, user.id).catch(() => undefined);
@@ -210,6 +225,7 @@ class Bot {
             const tuser = guild.members.get(user.id) ?? await guild.getRESTMember(user.id).catch(() => undefined);
             if(!tuser){return;}
             user = tuser;
+            if((user as Member).bot){return;}
             if((user as Member).roles.length !== 0){
                 if((user as Member).roles.some(r => this.global.ignoredRoles.includes(r))){return;}
             }
@@ -229,7 +245,16 @@ class Bot {
                 const destChannelObj = guild.channels.get(destChannel);
                 if(!destChannelObj || (!(destChannelObj.type === 0 || destChannelObj.type === 5))){return;}
                 const starredAt = Date.now();
-                destChannelObj.createMessage(this.formatPost(msg, data.count, starredAt)).then(async newmsg => {
+                let file: undefined | MessageFile = undefined;
+                if(msg.attachments[0] && ![".png", ".gif", ".jpg", ".jpeg"].some(end => msg.attachments[0].url.endsWith(end))){
+                    const data = await this.resolveFileAsBuffer(msg.attachments[0].url);
+                    if(data){
+                        file = {file: data, name: msg.attachments[0].filename};
+                    }
+                    
+                }
+                destChannelObj.createMessage(this.formatPost(msg, data.count, starredAt), file).then(async newmsg => {
+                    newmsg.addReaction(this.global.emote ?? "⭐").catch(() => undefined);
                     await this.starModel.updateOne({message: msg.id}, {post: newmsg.id, channel: destChannel, starredAt}).exec();
                 });
             }else{return;}
@@ -253,9 +278,33 @@ class Bot {
         }
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    async resolveFileAsBuffer(resource: any){
+        const file = await this.resolveFile(resource);
+        if(!file){return;}
+        if (Buffer.isBuffer(file)) return file;
+
+        const buffers = [];
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        //@ts-ignore
+        for await (const data of file) buffers.push(data);
+        return Buffer.concat((buffers as any));
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    async resolveFile(resource: any){
+        if (/^https?:\/\//.test(resource)) {
+            const res = await fetch(resource);
+            return res.body;
+        }else{
+            return;
+        }
+    }
+
     async messageReactionRemove(omsg: PossiblyUncachedMessage, emote: Emoji, user: string) {
+        if(user === this.client.user.id){return;}
         if(this.global.starChannel === ""){return;}
-        if(this.global.ignoredChannels.includes(omsg.channel.id)){return;}
+        
         const fullName = emote.id ? emote.animated ? `a:${emote.name}:${emote.id}` : `${emote.name}:${emote.id}` : emote.name;
         let toCheck;
         if(this.global.emote === undefined || this.global.emote === ""){
@@ -274,10 +323,20 @@ class Bot {
         }else{
             msg = omsg as Message;
         }
+        const sbData = await this.starModel.findOne({post: omsg.id}).exec();
+        if(sbData?.post){
+            sbData.count--;
+            await this.starModel.updateOne({message: sbData.message}, sbData).exec();
+            const newContent = `🌟 **${sbData.count}** | ` + msg.content.split(" | ")[1];
+            msg.edit({content: newContent, embed: msg.embeds[0]}).catch(() => undefined);
+            return;
+        }
+        if(this.global.ignoredChannels.includes(omsg.channel.id)){return;}
         if(msg.author.id === user){return;}
         const member = guild.members.get(user) ?? await guild.getRESTMember(user).catch(() => undefined);
         if(!member){return;}
         if(member.roles.length !== 0 && member.roles.some(r => this.global.ignoredRoles.includes(r))){return;}
+        if(member.bot){return;}
 
         const data = await this.starModel.findOne({message: msg.id}).exec();
         if(!data){return;}
@@ -327,18 +386,9 @@ class Bot {
         case "help": {
             msg.channel.createMessage({embed: {
                 title: "Blackstar Help",
-                color: 3375061,
+                color: this.global.color,
                 timestamp: new Date(),
-                description: `Prefix: %starboard\n\nCommands:
-                %starboard starchannel: sets the starboard channel
-                %starboard defaultthreshold: sets the default star count needed
-                %starboard splitchannel: sets split starboard channels
-                %starboard threshold: sets channel specific thresholds
-                %starbaord managerroles: sets manager roles
-                %starboard ignoredroles: sets star ignored roles
-                %starboard ignoredchannels: sets ignored channels
-                %starboard removeselfstars: sets if self star reaction are removed or just ignored
-                %starboard removeonunreact: set if the starpost is delete if the count falls below the threshold`
+                description: "Prefix: !star\n\nCommands:\n!star starchannel: sets the starboard channel\n!star defaultthreshold: sets the default star count needed\n!star splitchannel: sets split starboard channels\n!star threshold: sets channel specific thresholds\n!star managerroles: sets manager roles\n!star ignoredroles: sets star ignored roles\n!star ignoredchannels: sets ignored channels\n!star removeselfstars: sets if self star reaction are removed or just ignored\n!star removeonunreact: set if the starpost is delete if the count falls below the threshold\n!star color: changes the embed color"
             }}).catch(() => undefined);
             break;
         }
@@ -573,6 +623,21 @@ class Bot {
             }).catch(() => undefined);
             break;
         }
+        case "color": {
+            if(!args[0]){
+                msg.channel.createMessage(`The current embed color is #${this.global.color.toString(16)}`).catch(() => undefined);
+                break;
+            }
+            const newColor = parseInt((args[0].startsWith("#") ? args[0].substr(1) : args[0]), 16);
+            if(isNaN(newColor) || newColor < 0 || newColor > 16777215){
+                msg.channel.createMessage("Please give a valid hex color").catch(() => undefined);
+                break;
+            }
+            this.global.color = newColor;
+            await this.globalModel.updateOne({}, this.global).exec();
+            msg.channel.createMessage("Changed embed color to #" + newColor.toString(16)).catch(() => undefined);
+            break;
+        }
         default: {return;}
         }
     }
@@ -597,6 +662,7 @@ interface GlobalType {
     ignoredRoles: Array<string>;//
     splitChannels: {[key: string]: string};//
     removeOnUnreact: boolean;//
+    color: number;
 }
 
 interface StarType {

@@ -19,10 +19,12 @@
   "dependencies": {
     "eris": "^0.14.0",
     "mongoose": "^5.10.15",
+    "node-fetch": "^2.6.1",
     "signale": "^1.4.0"
   },
   "devDependencies": {
     "@types/mongoose": "^5.7.16",
+    "@types/node-fetch": "^2.5.7",
     "@types/signale": "^1.4.1",
     "@typescript-eslint/eslint-plugin": "^4.8.1",
     "@typescript-eslint/parser": "^4.8.1",
